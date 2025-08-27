@@ -70,19 +70,23 @@ $results = [];
 $error = '';
 if (isset($_SESSION['user_id'])) {
     // Handle search form submission
-    if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['search'])) {
-        $departure = trim($_POST['departure']);
-        $arrival = trim($_POST['arrival']);
-        $date = $_POST['date'];
-        $type = $_POST['type'];
+    if (isset($_GET['departure']) || isset($_GET['arrival'])) {
+        $departure = trim($_GET['departure'] ?? '');
+        $arrival = trim($_GET['arrival'] ?? '');
+        $date = $_GET['date'] ?? '';
+        $type = $_GET['type'] ?? 'all';
         
         $sql = "SELECT r.*, v.name as vehicle_name, v.number as vehicle_number, t.name as transport_type 
                 FROM routes r 
                 JOIN vehicles v ON r.vehicle_id = v.vehicle_id 
                 JOIN transport_types t ON v.type_id = t.type_id 
                 WHERE (r.departure_city LIKE ? OR r.departure_city LIKE ?) 
-                AND (r.arrival_city LIKE ? OR r.arrival_city LIKE ?) 
-                AND DATE(r.departure_datetime) = ?";
+                AND (r.arrival_city LIKE ? OR r.arrival_city LIKE ?)";
+        
+        // Only add date condition if a date is provided
+        if (!empty($date)) {
+            $sql .= " AND DATE(r.departure_datetime) = ?";
+        }
         
         if ($type != 'all') {
             $sql .= " AND t.name = ?";
@@ -98,11 +102,23 @@ if (isset($_SESSION['user_id'])) {
         $arrival_pattern1 = "%$arrival%";
         $arrival_pattern2 = "%" . substr($arrival, 0, 3) . "%";
         
-        if ($type != 'all') {
-            $stmt->bind_param("ssssss", $departure_pattern1, $departure_pattern2, $arrival_pattern1, $arrival_pattern2, $date, $type);
-        } else {
-            $stmt->bind_param("sssss", $departure_pattern1, $departure_pattern2, $arrival_pattern1, $arrival_pattern2, $date);
+        // Bind parameters based on conditions
+        $param_types = "ssss"; // Start with departure and arrival patterns
+        $params = [$departure_pattern1, $departure_pattern2, $arrival_pattern1, $arrival_pattern2];
+        
+        if (!empty($date)) {
+            $param_types .= "s";
+            $params[] = $date;
         }
+        
+        if ($type != 'all') {
+            $param_types .= "s";
+            $params[] = $type;
+        }
+        
+        // Prepare the parameter array for bind_param
+        $bind_params = array_merge([$param_types], $params);
+        call_user_func_array([$stmt, 'bind_param'], $bind_params);
         
         $stmt->execute();
         $result = $stmt->get_result();
@@ -128,7 +144,7 @@ if (isset($_SESSION['user_id'])) {
             // Create booking
             $sql = "INSERT INTO bookings (user_id, route_id, passengers, total_price) VALUES (?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iiid", $user_id, $route_id, $passengers, $total_price);
+            $stmt->bind_param("iii", $user_id, $route_id, $passengers, $total_price);
             
             if ($stmt->execute()) {
                 $booking_id = $conn->insert_id;
@@ -200,32 +216,10 @@ if (isset($_SESSION['user_id'])) {
         
         /* Auth forms */
         .auth-container { display: flex; justify-content: center; margin-top: 50px; }
-        .auth-tabs { display: flex; width: 400px; }
-        .auth-tab { flex: 1; text-align: center; padding: 15px; background: #e0e0e0; cursor: pointer; }
-        .auth-tab.active { background: white; }
-        .auth-form { background: white; padding: 20px; width: 400px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .auth-forms { display: flex; gap: 20px; }
+        .auth-form { background: white; padding: 20px; width: 400px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .auth-form h2 { margin-bottom: 20px; text-align: center; }
         .auth-form input { margin-bottom: 15px; }
-        
-        /* City suggestions */
-        .city-suggestions {
-            position: absolute;
-            background: white;
-            border: 1px solid #ddd;
-            max-height: 150px;
-            overflow-y: auto;
-            z-index: 1000;
-            width: 100%;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .city-suggestion {
-            padding: 8px 12px;
-            cursor: pointer;
-        }
-        .city-suggestion:hover {
-            background: #f0f0f0;
-        }
-        .form-group { position: relative; }
         
         /* Search tips */
         .search-tips {
@@ -263,11 +257,6 @@ if (isset($_SESSION['user_id'])) {
             <!-- Authentication Section -->
             <div class="auth-container">
                 <div class="auth-forms">
-                    <div class="auth-tabs">
-                        <div class="auth-tab active" id="login-tab">Login</div>
-                        <div class="auth-tab" id="register-tab">Register</div>
-                    </div>
-                    
                     <div class="auth-form" id="login-form">
                         <h2>Login to Your Account</h2>
                         <?php if ($auth_error): ?>
@@ -280,11 +269,11 @@ if (isset($_SESSION['user_id'])) {
                             <button type="submit" class="btn" style="width: 100%;">Login</button>
                         </form>
                         <p style="text-align: center; margin-top: 15px;">
-                            Demo: rakib@example.com / password123
+        
                         </p>
                     </div>
                     
-                    <div class="auth-form" id="register-form" style="display: none;">
+                    <div class="auth-form" id="register-form">
                         <h2>Create New Account</h2>
                         <?php if ($auth_error): ?>
                             <div class="message error"><?php echo $auth_error; ?></div>
@@ -308,38 +297,38 @@ if (isset($_SESSION['user_id'])) {
             
             <div class="card">
                 <h2>Search for Tickets</h2>
-                <form method="POST" class="search-form">
+                <form method="get" action="" class="search-form">
                     <div class="form-group">
                         <label for="departure">From</label>
-                        <input type="text" id="departure" name="departure" required value="<?php echo $_POST['departure'] ?? ''; ?>" placeholder="e.g. Dhaka">
+                        <input type="text" id="departure" name="departure" required value="<?php echo $_GET['departure'] ?? ''; ?>" placeholder="e.g. Dhaka">
                     </div>
                     <div class="form-group">
                         <label for="arrival">To</label>
-                        <input type="text" id="arrival" name="arrival" required value="<?php echo $_POST['arrival'] ?? ''; ?>" placeholder="e.g. Khulna">
+                        <input type="text" id="arrival" name="arrival" required value="<?php echo $_GET['arrival'] ?? ''; ?>" placeholder="e.g. Khulna">
                     </div>
                     <div class="form-group">
                         <label for="date">Date</label>
-                        <input type="date" id="date" name="date" required value="<?php echo $_POST['date'] ?? date('Y-m-d'); ?>" min="<?php echo date('Y-m-d'); ?>">
+                        <input type="date" id="date" name="date" value="<?php echo $_GET['date'] ?? date('Y-m-d'); ?>" min="<?php echo date('Y-m-d'); ?>">
                     </div>
                     <div class="form-group">
                         <label for="type">Transport Type</label>
                         <select id="type" name="type">
                             <option value="all">All</option>
-                            <option value="Bus" <?php if (($_POST['type'] ?? '') == 'Bus') echo 'selected'; ?>>Bus</option>
-                            <option value="Train" <?php if (($_POST['type'] ?? '') == 'Train') echo 'selected'; ?>>Train</option>
-                            <option value="Plane" <?php if (($_POST['type'] ?? '') == 'Plane') echo 'selected'; ?>>Plane</option>
+                            <option value="Bus" <?php if (($_GET['type'] ?? '') == 'Bus') echo 'selected'; ?>>Bus</option>
+                            <option value="Train" <?php if (($_GET['type'] ?? '') == 'Train') echo 'selected'; ?>>Train</option>
+                            <option value="Plane" <?php if (($_GET['type'] ?? '') == 'Plane') echo 'selected'; ?>>Plane</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>&nbsp;</label>
-                        <button type="submit" name="search" class="btn">Search</button>
+                        <button type="submit" class="btn">Search</button>
                     </div>
                 </form>
                 <div class="search-tips">
                     <strong>Search Tips:</strong>
                     <ul>
                         <li>Try popular routes like Dhaka to Chittagong, Dhaka to Khulna, or Chittagong to Cox's Bazar</li>
-                        <li>You can search with partial city names (e.g., "Dha" for Dhaka)</li>
+                        <li>You can search with partial city names </li>
                         <li>Make sure to select a future date</li>
                     </ul>
                 </div>
@@ -349,7 +338,7 @@ if (isset($_SESSION['user_id'])) {
                 <div class="message error"><?php echo $error; ?></div>
             <?php endif; ?>
 
-            <?php if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['search'])): ?>
+            <?php if (isset($_GET['departure']) || isset($_GET['arrival'])): ?>
                 <div class="card">
                     <h2>Available Routes</h2>
                     <?php if (count($results) > 0): ?>
@@ -414,80 +403,8 @@ if (isset($_SESSION['user_id'])) {
 
     <footer>
         <div class="container">
-            <p>Ticket Reservation System &copy; <?php echo date('Y'); ?></p>
+            <p>Ticket Reservation System ; <?php echo date('Y'); ?></p>
         </div>
     </footer>
-
-    <script>
-        // Tab switching for login/register forms
-        document.getElementById('login-tab').addEventListener('click', function() {
-            this.classList.add('active');
-            document.getElementById('register-tab').classList.remove('active');
-            document.getElementById('login-form').style.display = 'block';
-            document.getElementById('register-form').style.display = 'none';
-        });
-        
-        document.getElementById('register-tab').addEventListener('click', function() {
-            this.classList.add('active');
-            document.getElementById('login-tab').classList.remove('active');
-            document.getElementById('register-form').style.display = 'block';
-            document.getElementById('login-form').style.display = 'none';
-        });
-        
-        // City suggestions
-        const cities = ['Dhaka', 'Khulna', 'Chittagong', 'Rajshahi', 'Cox\'s Bazar', 'Sylhet'];
-        
-        function setupCitySuggestions(inputId) {
-            const input = document.getElementById(inputId);
-            let suggestionsDiv = null;
-            
-            input.addEventListener('input', function() {
-                // Remove previous suggestions
-                if (suggestionsDiv) {
-                    suggestionsDiv.remove();
-                    suggestionsDiv = null;
-                }
-                
-                const value = this.value.toLowerCase();
-                if (!value) return;
-                
-                const filteredCities = cities.filter(city => 
-                    city.toLowerCase().includes(value)
-                );
-                
-                if (filteredCities.length === 0) return;
-                
-                // Create suggestions div
-                suggestionsDiv = document.createElement('div');
-                suggestionsDiv.className = 'city-suggestions';
-                
-                filteredCities.forEach(city => {
-                    const suggestion = document.createElement('div');
-                    suggestion.className = 'city-suggestion';
-                    suggestion.textContent = city;
-                    suggestion.addEventListener('click', function() {
-                        input.value = city;
-                        suggestionsDiv.remove();
-                        suggestionsDiv = null;
-                    });
-                    suggestionsDiv.appendChild(suggestion);
-                });
-                
-                this.parentNode.appendChild(suggestionsDiv);
-            });
-            
-            // Close suggestions when clicking elsewhere
-            document.addEventListener('click', function(e) {
-                if (suggestionsDiv && !input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
-                    suggestionsDiv.remove();
-                    suggestionsDiv = null;
-                }
-            });
-        }
-        
-        // Initialize city suggestions
-        setupCitySuggestions('departure');
-        setupCitySuggestions('arrival');
-    </script>
 </body>
 </html>
