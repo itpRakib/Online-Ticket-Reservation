@@ -51,7 +51,7 @@
             <div class="hero-content">
                 <h1>Book Your Journey With Ease</h1>
                 <p>Find and book bus, train, and plane tickets all in one place</p>
-                <a href="#search" class="btn-primary">Book Now</a>
+                <a href="search_result.php" class="btn-primary">Book Now</a>
             </div>
         </section>
 
