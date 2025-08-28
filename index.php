@@ -1,6 +1,7 @@
 <?php
 // index.php - Main Application File
 session_start();
+date_default_timezone_set('Asia/Dhaka');
 include 'db_connect.php';
 
 // Handle user authentication
@@ -76,6 +77,7 @@ if (isset($_SESSION['user_id'])) {
         $date = $_GET['date'] ?? '';
         $type = $_GET['type'] ?? 'all';
         
+        // Build the SQL query
         $sql = "SELECT r.*, v.name as vehicle_name, v.number as vehicle_number, t.name as transport_type 
                 FROM routes r 
                 JOIN vehicles v ON r.vehicle_id = v.vehicle_id 
@@ -116,9 +118,14 @@ if (isset($_SESSION['user_id'])) {
             $params[] = $type;
         }
         
-        // Prepare the parameter array for bind_param
-        $bind_params = array_merge([$param_types], $params);
-        call_user_func_array([$stmt, 'bind_param'], $bind_params);
+        // Fix for bind_param warning - create references
+        $bind_params = array($param_types);
+        foreach ($params as $key => $value) {
+            $bind_params[] = &$params[$key];
+        }
+        
+        // Use call_user_func_array to bind parameters
+        call_user_func_array(array($stmt, 'bind_param'), $bind_params);
         
         $stmt->execute();
         $result = $stmt->get_result();
@@ -144,7 +151,7 @@ if (isset($_SESSION['user_id'])) {
             // Create booking
             $sql = "INSERT INTO bookings (user_id, route_id, passengers, total_price) VALUES (?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
-            $stmt->bind_param("iii", $user_id, $route_id, $passengers, $total_price);
+            $stmt->bind_param("iiid", $user_id, $route_id, $passengers, $total_price);
             
             if ($stmt->execute()) {
                 $booking_id = $conn->insert_id;
@@ -156,15 +163,16 @@ if (isset($_SESSION['user_id'])) {
                 $stmt->bind_param("ii", $new_seats, $route_id);
                 $stmt->execute();
                 
-                // Create payment record
+                // Create payment record with pending status
                 $sql = "INSERT INTO payments (booking_id, amount, payment_method, payment_status) 
-                        VALUES (?, ?, 'Credit Card', 'success')";
+                        VALUES (?, ?, 'Pending', 'pending')";
                 $stmt = $conn->prepare($sql);
                 $stmt->bind_param("id", $booking_id, $total_price);
                 $stmt->execute();
                 
-                $_SESSION['message'] = "Booking confirmed successfully! Booking ID: #$booking_id";
-                header("Location: index.php");
+                // After creating a booking, redirect to payment page instead of showing message
+                $_SESSION['message'] = "Booking created successfully! Please complete your payment.";
+                header("Location: payment.php?booking_id=" . $booking_id);
                 exit();
             } else {
                 $error = "Error creating booking. Please try again.";
@@ -195,6 +203,8 @@ if (isset($_SESSION['user_id'])) {
         .btn-secondary:hover { background: #546e7a; }
         .btn-danger { background: #e53935; }
         .btn-danger:hover { background: #c62828; }
+        .btn-success { background: #43a047; }
+        .btn-success:hover { background: #388e3c; }
         .card { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 20px; }
         .search-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
         .form-group { margin-bottom: 15px; }
@@ -232,7 +242,51 @@ if (isset($_SESSION['user_id'])) {
         .search-tips ul {
             margin: 5px 0 0 20px;
         }
+        
+        /* Popular routes */
+        .popular-routes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .popular-route {
+            background: #e3f2fd;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .popular-route:hover {
+            background: #bbdefb;
+        }
+        
+        /* Quick actions */
+        .quick-actions {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .quick-action {
+            flex: 1;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .quick-action:hover {
+            transform: translateY(-5px);
+        }
+        .quick-action i {
+            font-size: 24px;
+            margin-bottom: 10px;
+            display: block;
+        }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <header>
@@ -242,7 +296,8 @@ if (isset($_SESSION['user_id'])) {
                 <div class="user-info">
                     <span>Welcome, <?php echo $_SESSION['full_name']; ?></span>
                     <a href="bookings.php" class="btn">My Bookings</a>
-                    <a href="logout.php" class="btn btn-secondary">Logout</a>
+                    <a href="confirm_cancel.php" class="btn btn-secondary">Confirm/Cancel</a>
+                    <a href="logout.php" class="btn btn-danger">Logout</a>
                 </div>
             <?php else: ?>
                 <div class="user-info">
@@ -268,9 +323,6 @@ if (isset($_SESSION['user_id'])) {
                             <input type="password" name="password" placeholder="Password" required>
                             <button type="submit" class="btn" style="width: 100%;">Login</button>
                         </form>
-                        <p style="text-align: center; margin-top: 15px;">
-        
-                        </p>
                     </div>
                     
                     <div class="auth-form" id="register-form">
@@ -294,6 +346,30 @@ if (isset($_SESSION['user_id'])) {
             <?php if (isset($_SESSION['message'])): ?>
                 <div class="message success"><?php echo $_SESSION['message']; unset($_SESSION['message']); ?></div>
             <?php endif; ?>
+            
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <div class="quick-action" onclick="location.href='index.php'">
+                    <i class="fas fa-search"></i>
+                    <h3>Search Tickets</h3>
+                    <p>Find available routes</p>
+                </div>
+                <div class="quick-action" onclick="location.href='bookings.php'">
+                    <i class="fas fa-ticket-alt"></i>
+                    <h3>My Bookings</h3>
+                    <p>View your reservations</p>
+                </div>
+                <div class="quick-action" onclick="location.href='confirm_cancel.php'">
+                    <i class="fas fa-check-circle"></i>
+                    <h3>Confirm/Cancel</h3>
+                    <p>Manage your bookings</p>
+                </div>
+                <div class="quick-action" onclick="location.href='payment.php'">
+                    <i class="fas fa-credit-card"></i>
+                    <h3>Payment</h3>
+                    <p>Complete your payments</p>
+                </div>
+            </div>
             
             <div class="card">
                 <h2>Search for Tickets</h2>
@@ -324,13 +400,16 @@ if (isset($_SESSION['user_id'])) {
                         <button type="submit" class="btn">Search</button>
                     </div>
                 </form>
+                
                 <div class="search-tips">
-                    <strong>Search Tips:</strong>
-                    <ul>
-                        <li>Try popular routes like Dhaka to Chittagong, Dhaka to Khulna, or Chittagong to Cox's Bazar</li>
-                        <li>You can search with partial city names </li>
-                        <li>Make sure to select a future date</li>
-                    </ul>
+                    <strong>Popular Routes:</strong>
+                    <div class="popular-routes">
+                        <div class="popular-route" onclick="setRoute('Dhaka', 'Chittagong')">Dhaka → Chittagong</div>
+                        <div class="popular-route" onclick="setRoute('Dhaka', 'Khulna')">Dhaka → Khulna</div>
+                        <div class="popular-route" onclick="setRoute('Chittagong', 'Cox\'s Bazar')">Chittagong → Cox's Bazar</div>
+                        <div class="popular-route" onclick="setRoute('Dhaka', 'Rajshahi')">Dhaka → Rajshahi</div>
+                        <div class="popular-route" onclick="setRoute('Dhaka', 'Sylhet')">Dhaka → Sylhet</div>
+                    </div>
                 </div>
             </div>
 
@@ -371,7 +450,7 @@ if (isset($_SESSION['user_id'])) {
                                         $duration = $interval->format('%hh %im');
                                         ?>
                                         <td><?php echo $duration; ?></td>
-                                        <td>$<?php echo $route['price']; ?></td>
+                                        <td>৳<?php echo $route['price']; ?></td>
                                         <td><?php echo $route['available_seats']; ?></td>
                                         <td>
                                             <form method="POST" class="booking-form">
@@ -385,7 +464,7 @@ if (isset($_SESSION['user_id'])) {
                             </tbody>
                         </table>
                     <?php else: ?>
-                        <p>No routes found matching your criteria. Try searching for routes between popular Bangladeshi cities like Dhaka, Khulna, Chittagong, Rajshahi, Cox's Bazar, or Sylhet.</p>
+                        <p>No routes found matching your criteria. Try searching for routes between popular Bangladeshi cities.</p>
                         <div class="search-tips">
                             <strong>Try these search examples:</strong>
                             <ul>
@@ -403,8 +482,16 @@ if (isset($_SESSION['user_id'])) {
 
     <footer>
         <div class="container">
-            <p>Ticket Reservation System ; <?php echo date('Y'); ?></p>
+            <p>Ticket Reservation System &copy; <?php echo date('Y'); ?></p>
+            <p>Need help? <a href="confirm_cancel.php">Confirm or cancel your booking</a> | Contact support: support@ticketreservation.com</p>
         </div>
     </footer>
+
+    <script>
+        function setRoute(departure, arrival) {
+            document.getElementById('departure').value = departure;
+            document.getElementById('arrival').value = arrival;
+        }
+    </script>
 </body>
 </html>
