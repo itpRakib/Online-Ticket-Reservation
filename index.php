@@ -138,6 +138,20 @@ if (isset($_SESSION['user_id'])) {
         $passengers = $_POST['passengers'];
         $user_id = $_SESSION['user_id'];
         
+        // Verify user still exists in database
+        $user_check_sql = "SELECT * FROM users WHERE user_id = ?";
+        $user_check_stmt = $conn->prepare($user_check_sql);
+        $user_check_stmt->bind_param("i", $user_id);
+        $user_check_stmt->execute();
+        $user_result = $user_check_stmt->get_result();
+        
+        if ($user_result->num_rows == 0) {
+            // User doesn't exist, destroy session and redirect to login
+            session_destroy();
+            header("Location: index.php");
+            exit();
+        }
+        
         // Get route details
         $sql = "SELECT * FROM routes WHERE route_id = ?";
         $stmt = $conn->prepare($sql);

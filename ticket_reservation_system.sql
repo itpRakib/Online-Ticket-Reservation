@@ -80,21 +80,21 @@ INSERT INTO vehicles (type_id, number, name, capacity, facilities) VALUES
 (3, 'PLN-201', 'Boeing 737', 180, 'In-flight Entertainment, Meals'),
 (3, 'PLN-202', 'Airbus A320', 160, 'WiFi, Refreshments');
 
--- Insert routes
+-- Insert routes (Updated dates to September 3-30, 2025)
 INSERT INTO routes (vehicle_id, departure_city, arrival_city, departure_datetime, arrival_datetime, price, available_seats) VALUES
 -- Bus Routes
-(1, 'Dhaka', 'Chittagong', '2025-08-28 09:00:00', '2025-08-28 15:00:00', 680.00, 40),
-(1, 'Dhaka', 'Rajshahi', '2025-08-28 10:30:00', '2025-08-28 17:00:00', 700.00, 35),
-(1, 'Dhaka', 'Sylhet', '2025-08-29 08:30:00', '2025-08-29 14:30:00', 650.00, 40),
+(1, 'Dhaka', 'Chittagong', '2025-09-03 09:00:00', '2025-09-03 15:00:00', 680.00, 40),
+(1, 'Dhaka', 'Rajshahi', '2025-09-04 10:30:00', '2025-09-04 17:00:00', 700.00, 35),
+(1, 'Dhaka', 'Sylhet', '2025-09-05 08:30:00', '2025-09-05 14:30:00', 650.00, 40),
 
 -- Train Routes
-(3, 'Dhaka', 'Chittagong', '2025-08-28 07:45:00', '2025-08-28 13:50:00', 500.00, 300),
-(3, 'Dhaka', 'Dinajpur', '2025-08-28 10:00:00', '2025-08-28 18:50:00', 550.00, 280),
-(4, 'Sylhet', 'Dhaka', '2025-08-28 22:00:00', '2025-08-29 05:10:00', 520.00, 300),
+(3, 'Dhaka', 'Chittagong', '2025-09-06 07:45:00', '2025-09-06 13:50:00', 500.00, 300),
+(3, 'Dhaka', 'Dinajpur', '2025-09-07 10:00:00', '2025-09-07 18:50:00', 550.00, 280),
+(4, 'Sylhet', 'Dhaka', '2025-09-08 22:00:00', '2025-09-09 05:10:00', 520.00, 300),
 
 -- Flight Routes
-(5, 'Dhaka', 'Cox''s Bazar', '2025-08-29 11:00:00', '2025-08-29 12:05:00', 3500.00, 180),
-(6, 'Dhaka', 'Sylhet', '2025-08-29 14:00:00', '2025-08-29 15:00:00', 3200.00, 160);
+(5, 'Dhaka', 'Cox''s Bazar', '2025-09-09 11:00:00', '2025-09-09 12:05:00', 3500.00, 180),
+(6, 'Dhaka', 'Sylhet', '2025-09-10 14:00:00', '2025-09-10 15:00:00', 3200.00, 160);
 
 -- Insert sample users
 INSERT INTO users (username, password, email, full_name, phone) VALUES
@@ -102,7 +102,7 @@ INSERT INTO users (username, password, email, full_name, phone) VALUES
 ('jane_smith', 'hashed_password_2', 'jane@example.com', 'Jane Smith', '+8801812345678'),
 ('mike_wilson', 'hashed_password_3', 'mike@example.com', 'Mike Wilson', '+8801912345678');
 
--- Insert sample bookings
+-- Insert sample bookings (Updated to match new route dates)
 INSERT INTO bookings (user_id, route_id, passengers, total_price, status) VALUES
 (1, 1, 2, 1360.00, 'confirmed'),
 (2, 4, 1, 500.00, 'confirmed'),
