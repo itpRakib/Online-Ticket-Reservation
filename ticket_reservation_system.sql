@@ -109,6 +109,8 @@ INSERT INTO bookings (user_id, route_id, passengers, total_price, status) VALUES
 (3, 7, 3, 10500.00, 'confirmed'),
 (1, 2, 1, 700.00, 'cancelled');
 
+
+
 -- Insert sample payments
 INSERT INTO payments (booking_id, amount, payment_method, payment_status) VALUES
 (1, 1360.00, 'Credit Card', 'success'),
